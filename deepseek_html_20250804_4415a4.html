@@ -756,82 +756,71 @@
                 }
             }
 
-// 放置碱基 (已修正语法错误)
+            // 放置碱基 (重构后的最终版本)
             function placeBase(base, x, y) {
-                const threshold = 35;
-                let closestAbsoluteIndex = null;
-                let minDistance = Infinity;
-                let isTargetingTemplate = false;
-
                 const centerY = 200;
-                const strandDistance = 150;
 
-                // 1. 根据鼠标落点，判断用户想要配对哪条链
+                // 判断用户是想与上方链还是下方链配对
                 if (y > centerY) {
-                    // 目标：与模板链（下方）配对，新碱基应放置在其上方
-                    const targetY = centerY + strandDistance / 2 - 40;
-                    templateStrandBases.forEach((templateBase, relativeIndex) => {
-                        const absoluteIndex = unwoundStart + relativeIndex;
-                        if (!templateBase.paired) {
-                            const canPlace = (absoluteIndex === unwoundStart) || (newTemplateStrand[absoluteIndex - 1] !== null);
-                            if (canPlace) {
-                                const distance = Math.hypot(x - templateBase.x, y - targetY);
-                                if (distance < minDistance && distance < threshold) {
-                                    minDistance = distance;
-                                    closestAbsoluteIndex = absoluteIndex;
-                                    isTargetingTemplate = true;
-                                }
-                            }
-                        }
-                    });
-                } else {
-                    // 目标：与编码链（上方）配对，新碱基应放置在其下方
-                    const targetY = centerY - strandDistance / 2 + 40;
-                    codingStrandBases.forEach((codingBase, relativeIndex) => {
-                        const absoluteIndex = unwoundStart + relativeIndex;
-                        if (!codingBase.paired) {
-                            const canPlace = (absoluteIndex === unwoundEnd - 1) || (newCodingStrand[absoluteIndex + 1] !== null);
-                            if (canPlace) {
-                                const distance = Math.hypot(x - codingBase.x, y - targetY);
-                                if (distance < minDistance && distance < threshold) {
-                                    minDistance = distance;
-                                    closestAbsoluteIndex = absoluteIndex;
-                                    isTargetingTemplate = false;
-                                }
-                            }
-                        }
-                    });
-                }
+                    // **目标: 与模板链(下方)配对, 复制方向为从左到右**
 
-                // 2. 如果找到了可配对的位置，则执行配对逻辑
-                if (closestAbsoluteIndex !== null) {
-                    const relativeIndex = closestAbsoluteIndex - unwoundStart;
-                    if (isTargetingTemplate) {
-                        const templateBase = templateStrandBases[relativeIndex];
-                        if (basePairs[base] === templateBase.base) {
-                            addNewBase(base, closestAbsoluteIndex, true);
+                    // 1. 直接找到第一个尚未配对的碱基作为“下一个”目标
+                    const nextUnpairedRelativeIndex = templateStrandBases.findIndex(b => !b.paired);
+
+                    // 2. 如果找到了下一个目标
+                    if (nextUnpairedRelativeIndex !== -1) {
+                        const absoluteIndex = unwoundStart + nextUnpairedRelativeIndex;
+                        const templateBase = templateStrandBases[nextUnpairedRelativeIndex];
+                        const requiredBase = basePairs[templateBase.base]; // 计算出这个位置唯一需要的碱基
+
+                        // 3. 检查拖动的碱基是否就是所需要的那个
+                        if (base === requiredBase) {
+                            // 配对成功！
+                            addNewBase(base, absoluteIndex, true);
                             templateBase.paired = true;
+                            checkReplicationComplete();
                         } else {
-                            statusBar.textContent = `错误：${base} 不能与 ${templateBase.base} 配对！`;
-                            setTimeout(() => statusBar.textContent = '请继续配对碱基 (模板链从左向右，编码链从右向左)', 2000);
-                        }
-                    } else { // isTargetingCoding
-                        const codingBase = codingStrandBases[relativeIndex];
-                        if (basePairs[base] === codingBase.base) {
-                            addNewBase(base, closestAbsoluteIndex, false);
-                            codingBase.paired = true;
-                        } else {
-                            statusBar.textContent = `错误：${base} 不能与 ${codingBase.base} 配对！`;
-                            setTimeout(() => statusBar.textContent = '请继续配对碱基 (模板链从左向右，编码链从右向左)', 2000);
+                            // 配对失败，提示用户正确的碱基
+                            statusBar.textContent = `配对错误！下一个需要配对的是 ${requiredBase}，而不是 ${base}`;
+                            setTimeout(() => statusBar.textContent = '请继续配对碱基 (模板链从左向右，编码链从右向左)', 2500);
                         }
                     }
-                    checkReplicationComplete();
+                    // 如果 nextUnpairedRelativeIndex === -1, 说明下方链已全部配对完毕，不执行任何操作。
+
                 } else {
-                    // 3. 如果没有找到可配对位置，则提示用户
-                    statusBar.textContent = '无法在此位置放置碱基，请确保按正确顺序配对。';
-                    setTimeout(() => statusBar.textContent = '请继续配对碱基 (模板链从左向右，编码链从右向左)', 2500);
+                    // **目标: 与编码链(上方)配对, 复制方向为从右到左**
+
+                    // 1. 从右向左，找到第一个尚未配对的碱基作为“下一个”目标
+                    let lastUnpairedRelativeIndex = -1;
+                    for (let i = codingStrandBases.length - 1; i >= 0; i--) {
+                        if (!codingStrandBases[i].paired) {
+                            lastUnpairedRelativeIndex = i;
+                            break;
+                        }
+                    }
+
+                    // 2. 如果找到了下一个目标
+                    if (lastUnpairedRelativeIndex !== -1) {
+                        const absoluteIndex = unwoundStart + lastUnpairedRelativeIndex;
+                        const codingBase = codingStrandBases[lastUnpairedRelativeIndex];
+                        const requiredBase = basePairs[codingBase.base]; // 计算出这个位置唯一需要的碱基
+
+                        // 3. 检查拖动的碱基是否就是所需要的那个
+                        if (base === requiredBase) {
+                            // 配对成功！
+                            addNewBase(base, absoluteIndex, false);
+                            codingBase.paired = true;
+                            checkReplicationComplete();
+                        } else {
+                            // 配对失败，提示用户正确的碱基
+                            statusBar.textContent = `配对错误！下一个需要配对的是 ${requiredBase}，而不是 ${base}`;
+                            setTimeout(() => statusBar.textContent = '请继续配对碱基 (模板链从左向右，编码链从右向左)', 2500);
+                        }
+                    }
+                    // 如果 lastUnpairedRelativeIndex === -1, 说明上方链已全部配对完毕，不执行任何操作。
                 }
             }
+
 
 
             // 添加新碱基 (修正后)
