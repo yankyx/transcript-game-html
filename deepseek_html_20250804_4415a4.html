@@ -756,88 +756,85 @@
                 }
             }
 
-            // 放置碱基
+// 放置碱基 (已修正语法错误)
             function placeBase(base, x, y) {
-                // 找到最近的碱基位置
-                const threshold = 40;
-                let closestBase = null;
+                const threshold = 35;
+                let closestAbsoluteIndex = null;
                 let minDistance = Infinity;
-                let isTemplateStrand = false;
+                let isTargetingTemplate = false;
 
-                // 检查模板链 (3'→5' 方向，只能从左到右复制)
-                templateStrandBases.forEach((templateBase, index) => {
-                    if (!templateBase.paired && index >= unwoundStart && index < unwoundEnd) {
-                        // 检查是否可以在该位置放置（必须是前一个位置已配对或为起始位置）
-                        const canPlace = (index === unwoundStart) || (newTemplateStrand[index - 1] !== null);
-                        if (canPlace) {
-                            const distance = Math.sqrt(Math.pow(x - templateBase.x, 2) + Math.pow(y - templateBase.y, 2));
-                            if (distance < minDistance && distance < threshold) {
-                                minDistance = distance;
-                                closestBase = index;
-                                isTemplateStrand = true;
-                            }
-                        }
-                    }
-                });
+                const centerY = 200;
+                const strandDistance = 150;
 
-                if (!closestBase) {
-                    // 检查编码链 (5'→3' 方向，只能从右到左复制)
-                    codingStrandBases.forEach((codingBase, index) => {
-                        if (!codingBase.paired && index >= unwoundStart && index < unwoundEnd) {
-                            // 检查是否可以在该位置放置（必须是后一个位置已配对或为结束位置）
-                            const canPlace = (index === unwoundEnd - 1) || (newCodingStrand[index + 1] !== null);
+                // 1. 根据鼠标落点，判断用户想要配对哪条链
+                if (y > centerY) {
+                    // 目标：与模板链（下方）配对，新碱基应放置在其上方
+                    const targetY = centerY + strandDistance / 2 - 40;
+                    templateStrandBases.forEach((templateBase, relativeIndex) => {
+                        const absoluteIndex = unwoundStart + relativeIndex;
+                        if (!templateBase.paired) {
+                            const canPlace = (absoluteIndex === unwoundStart) || (newTemplateStrand[absoluteIndex - 1] !== null);
                             if (canPlace) {
-                                const distance = Math.sqrt(Math.pow(x - codingBase.x, 2) + Math.pow(y - codingBase.y, 2));
+                                const distance = Math.hypot(x - templateBase.x, y - targetY);
                                 if (distance < minDistance && distance < threshold) {
                                     minDistance = distance;
-                                    closestBase = index;
-                                    isTemplateStrand = false;
+                                    closestAbsoluteIndex = absoluteIndex;
+                                    isTargetingTemplate = true;
+                                }
+                            }
+                        }
+                    });
+                } else {
+                    // 目标：与编码链（上方）配对，新碱基应放置在其下方
+                    const targetY = centerY - strandDistance / 2 + 40;
+                    codingStrandBases.forEach((codingBase, relativeIndex) => {
+                        const absoluteIndex = unwoundStart + relativeIndex;
+                        if (!codingBase.paired) {
+                            const canPlace = (absoluteIndex === unwoundEnd - 1) || (newCodingStrand[absoluteIndex + 1] !== null);
+                            if (canPlace) {
+                                const distance = Math.hypot(x - codingBase.x, y - targetY);
+                                if (distance < minDistance && distance < threshold) {
+                                    minDistance = distance;
+                                    closestAbsoluteIndex = absoluteIndex;
+                                    isTargetingTemplate = false;
                                 }
                             }
                         }
                     });
                 }
 
-                if (closestBase !== null) {
-                    if (isTemplateStrand) {
-                        // 与模板链配对
-                        const templateBase = templateStrandBases[closestBase];
+                // 2. 如果找到了可配对的位置，则执行配对逻辑
+                if (closestAbsoluteIndex !== null) {
+                    const relativeIndex = closestAbsoluteIndex - unwoundStart;
+                    if (isTargetingTemplate) {
+                        const templateBase = templateStrandBases[relativeIndex];
                         if (basePairs[base] === templateBase.base) {
-                            // 配对正确
-                            addNewBase(base, closestBase, true);
+                            addNewBase(base, closestAbsoluteIndex, true);
                             templateBase.paired = true;
                         } else {
                             statusBar.textContent = `错误：${base} 不能与 ${templateBase.base} 配对！`;
-                            setTimeout(() => {
-                                statusBar.textContent = '请继续配对碱基 (模板链从左向右，编码链从右向左)';
-                            }, 2000);
+                            setTimeout(() => statusBar.textContent = '请继续配对碱基 (模板链从左向右，编码链从右向左)', 2000);
                         }
-                    } else {
-                        // 与编码链配对
-                        const codingBase = codingStrandBases[closestBase];
+                    } else { // isTargetingCoding
+                        const codingBase = codingStrandBases[relativeIndex];
                         if (basePairs[base] === codingBase.base) {
-                            // 配对正确
-                            addNewBase(base, closestBase, false);
+                            addNewBase(base, closestAbsoluteIndex, false);
                             codingBase.paired = true;
                         } else {
                             statusBar.textContent = `错误：${base} 不能与 ${codingBase.base} 配对！`;
-                            setTimeout(() => {
-                                statusBar.textContent = '请继续配对碱基 (模板链从左向右，编码链从右向左)';
-                            }, 2000);
+                            setTimeout(() => statusBar.textContent = '请继续配对碱基 (模板链从左向右，编码链从右向左)', 2000);
                         }
                     }
-
-                    // 检查是否所有碱基都已配对
                     checkReplicationComplete();
                 } else {
-                    statusBar.textContent = '无法在此位置放置碱基，请确保模板链从左向右、编码链从右向左复制';
-                    setTimeout(() => {
-                        statusBar.textContent = '请继续配对碱基 (模板链从左向右，编码链从右向左)';
-                    }, 2000);
+                    // 3. 如果没有找到可配对位置，则提示用户
+                    statusBar.textContent = '无法在此位置放置碱基，请确保按正确顺序配对。';
+                    setTimeout(() => statusBar.textContent = '请继续配对碱基 (模板链从左向右，编码链从右向左)', 2500);
                 }
             }
 
-            // 添加新碱基
+
+            // 添加新碱基 (修正后)
             function addNewBase(base, index, isTemplateStrand) {
                 const baseSize = 24;
                 const startX = 100;
@@ -847,26 +844,19 @@
 
                 const x = startX + index * spacing;
                 let y;
-                let strandColor;
 
                 if (isTemplateStrand) {
-                    // 新链与模板链配对 (位于模板链上方)
-                    // 模板链是红色，新链应为蓝色
-                    y = centerY + strandDistance/2 - 40;
+                    y = centerY + strandDistance / 2 - 40;
                     newTemplateStrand[index] = base;
-                    strandColor = '#3498db'; // 蓝色
                 } else {
-                    // 新链与编码链配对 (位于编码链下方)
-                    // 编码链是蓝色，新链应为红色
-                    y = centerY - strandDistance/2 + 40;
+                    y = centerY - strandDistance / 2 + 40;
                     newCodingStrand[index] = base;
-                    strandColor = '#e74c3c'; // 红色
                 }
 
-                // 创建碱基矩形
+                // 创建碱基矩形 (这部分无变化)
                 const baseRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                baseRect.setAttribute('x', x - baseSize/2);
-                baseRect.setAttribute('y', y - baseSize/2);
+                baseRect.setAttribute('x', x - baseSize / 2);
+                baseRect.setAttribute('y', y - baseSize / 2);
                 baseRect.setAttribute('width', baseSize);
                 baseRect.setAttribute('height', baseSize);
                 baseRect.setAttribute('rx', '4');
@@ -877,7 +867,7 @@
                 baseRect.setAttribute('class', 'dna-base new-base');
                 unwoundSvg.appendChild(baseRect);
 
-                // 创建碱基标签
+                // 创建碱基标签 (这部分无变化)
                 const baseText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 baseText.setAttribute('x', x);
                 baseText.setAttribute('y', y);
@@ -885,8 +875,9 @@
                 baseText.textContent = base;
                 unwoundSvg.appendChild(baseText);
 
-                // 创建氢键
-                const bondY1 = isTemplateStrand ? templateStrandBases[index].y : codingStrandBases[index].y;
+                // 创建氢键 (修正部分)
+                const relativeIndex = index - unwoundStart; // **从绝对索引计算相对索引**
+                const bondY1 = isTemplateStrand ? templateStrandBases[relativeIndex].y : codingStrandBases[relativeIndex].y;
                 const bondY2 = y;
 
                 const bond = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -895,9 +886,10 @@
                 bond.setAttribute('x2', x);
                 bond.setAttribute('y2', bondY2);
                 bond.setAttribute('class', 'hydrogen-bond');
-                bond.setAttribute('style', 'z-index: 10;');
-                unwoundSvg.appendChild(bond);
+                unwoundSvg.insertBefore(bond, baseRect); // 将氢键插入到碱基元素之前，避免覆盖
+                connectNewStrands(); // 配对一个就尝试连接一次，可以实时看到链的形成
             }
+
 
             // 检查复制是否完成
             function checkReplicationComplete() {
@@ -924,70 +916,49 @@
                 }
             }
 
-            // 连接新链线段
+            // 连接新链线段 (修正后)
             function connectNewStrands() {
-                const baseSize = 24;
+                // 移除旧的连接线，避免重复绘制
+                document.querySelectorAll('.new-strand-bond').forEach(line => line.remove());
+
                 const startX = 100;
                 const centerY = 200;
                 const strandDistance = 150;
                 const spacing = 30;
 
-                // 连接新链线段（分段显示）
-                function drawNewStrandSegment(start, end, isTemplate) {
-                    let prevX = null;
-                    let prevY = null;
-                    const color = isTemplate ? '#3498db' : '#e74c3c';
-                    const zIndex = isTemplate ? 20 : 5;
-                    const offsetY = isTemplate ? (centerY + strandDistance/2 - 40) : (centerY - strandDistance/2 + 40);
-
-                    for (let i = start; i <= end; i++) {
-                        if ((isTemplate && newTemplateStrand[i] !== null) || (!isTemplate && newCodingStrand[i] !== null)) {
-                            const x = startX + i * spacing;
-                            const y = offsetY;
-
-                            if (prevX !== null) {
-                                const newBond = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                                newBond.setAttribute('x1', prevX);
-                                newBond.setAttribute('y1', prevY);
-                                newBond.setAttribute('x2', x);
-                                newBond.setAttribute('y2', y);
-                                newBond.setAttribute('stroke', color);
-                                newBond.setAttribute('stroke-width', '3');
-                                newBond.setAttribute('fill', 'none');
-                                newBond.setAttribute('style', 'z-index: ' + zIndex + ';');
-                                unwoundSvg.appendChild(newBond);
-                            }
-
-                            prevX = x;
-                            prevY = y;
-                        }
+                // 连接与模板链配对的新链 (蓝色)
+                let y1 = centerY + strandDistance / 2 - 40;
+                for (let i = 0; i < newTemplateStrand.length - 1; i++) {
+                    if (newTemplateStrand[i] && newTemplateStrand[i + 1]) {
+                        const bond = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        bond.setAttribute('x1', startX + i * spacing);
+                        bond.setAttribute('y1', y1);
+                        bond.setAttribute('x2', startX + (i + 1) * spacing);
+                        bond.setAttribute('y2', y1);
+                        bond.setAttribute('stroke', '#3498db');
+                        bond.setAttribute('stroke-width', '3');
+                        bond.setAttribute('class', 'new-strand-bond');
+                        unwoundSvg.insertBefore(bond, unwoundSvg.firstChild);
                     }
                 }
 
-                // 连接模板链子链 (蓝色) - 从左到右 (连续片段)
-                let segmentStart = null;
-                for (let i = 0; i < newTemplateStrand.length; i++) {
-                    if (newTemplateStrand[i] !== null && segmentStart === null) {
-                        segmentStart = i;
-                    } else if ((newTemplateStrand[i] === null || i === newTemplateStrand.length - 1) && segmentStart !== null) {
-                        const end = newTemplateStrand[i] === null ? i - 1 : i;
-                        drawNewStrandSegment(segmentStart, end, true);
-                        segmentStart = null;
-                    }
-                }
-
-                // 连接编码链子链 (红色) - 从右到左 (连续片段)
-                segmentStart = null;
-                for (let i = newCodingStrand.length - 1; i >= 0; i--) {
-                    if (newCodingStrand[i] !== null && segmentStart === null) {
-                        segmentStart = i;
-                    } else if ((newCodingStrand[i] === null || i === 0) && segmentStart !== null) {
-                        const end = newCodingStrand[i] === null ? i + 1 : i;
-                        drawNewStrandSegment(end, segmentStart, false);
-                        segmentStart = null;
+                // 连接与编码链配对的新链 (红色)
+                let y2 = centerY - strandDistance / 2 + 40;
+                for (let i = 0; i < newCodingStrand.length - 1; i++) {
+                    if (newCodingStrand[i] && newCodingStrand[i + 1]) {
+                        const bond = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        bond.setAttribute('x1', startX + i * spacing);
+                        bond.setAttribute('y1', y2);
+                        bond.setAttribute('x2', startX + (i + 1) * spacing);
+                        bond.setAttribute('y2', y2);
+                        bond.setAttribute('stroke', '#e74c3c');
+                        bond.setAttribute('stroke-width', '3');
+                        bond.setAttribute('class', 'new-strand-bond');
+                        unwoundSvg.insertBefore(bond, unwoundSvg.firstChild);
                     }
                 }
             }
+
 
             // 形成新的双螺旋
             function formNewHelices() {
