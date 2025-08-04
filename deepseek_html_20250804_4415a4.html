@@ -246,7 +246,7 @@
         .template-strand {
             stroke: #3498db;
         }
-        
+
         .coding-strand {
             stroke: #e74c3c;
         }
@@ -327,6 +327,7 @@
         </div>
     </div>
 
+
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // 配置参数
@@ -339,8 +340,8 @@
                     centerY: 200
                 },
                 strand: {
-                    coding: "ATGCCATCGTTGGCCATCATGTAA",
-                    template: "TACGGTAGCAACCGGTAGTACATT"
+                    coding: "ATGCCATCGTTGGCCATCATGTAAG",
+                    template: "TACGGTAGCAACCGGTAGTACATTC"
                 }
             };
 
@@ -633,7 +634,7 @@
 
                 // 更新状态
                 isUnwound = true;
-                statusBar.textContent = 'DNA部分解旋！请将碱基拖拽到对应的DNA链上进行配对';
+                statusBar.textContent = 'DNA部分解旋！请将碱基拖拽到对应的DNA链下方进行配对';
 
                 // 初始化新链数组
                 if (newTemplateStrand.length === 0) {
@@ -669,7 +670,7 @@
 
                 // 重置按钮
                 resetBtn.addEventListener('click', resetSimulation);
-                
+
                 // 帮助按钮
                 helpBtn.addEventListener('click', () => {
                     statusBar.textContent = '请按照操作说明进行：1. 拖拽解旋酶 2. 拖拽碱基配对';
@@ -772,9 +773,10 @@
                         const absoluteIndex = unwoundStart + nextUnpairedRelativeIndex;
                         const templateBase = templateStrandBases[nextUnpairedRelativeIndex];
                         const requiredBase = basePairs[templateBase.base]; // 计算出这个位置唯一需要的碱基
+                        const correctPair = basePairs[base]; // 拖进来的 base 所能配对的碱基
 
                         // 3. 检查拖动的碱基是否就是所需要的那个
-                        if (base === requiredBase) {
+                        if (templateBase.base === correctPair) {
                             // 配对成功！
                             addNewBase(base, absoluteIndex, true);
                             templateBase.paired = true;
